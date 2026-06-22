@@ -142,13 +142,16 @@ docker exec pos-postgres pg_isready -U "${POSTGRES_USER}" -q 2>/dev/null \
     || die "PostgreSQL did not become ready in time"
 ok "PostgreSQL ready"
 
-# Compute Guacamole password hash: SHA-256(password_bytes + salt_bytes) stored as bytea
+# Compute Guacamole password hash: SHA-256(password_str + salt_hex_str) stored as bytea
 HASH_DATA=$(python3 - "${GUAC_ADMIN_PASSWORD}" << 'PYEOF'
 import hashlib, os, binascii, sys
-password = sys.argv[1].encode('utf-8')
+password = sys.argv[1]
 salt = os.urandom(32)
-hash_val = hashlib.sha256(password + salt).digest()
-print(binascii.hexlify(hash_val).decode() + ':' + binascii.hexlify(salt).decode())
+salt_hex = binascii.hexlify(salt).decode('utf-8').upper()
+combined = password + salt_hex
+hash_val = hashlib.sha256(combined.encode('utf-8')).digest()
+hash_hex = binascii.hexlify(hash_val).decode('utf-8').upper()
+print(hash_hex + ':' + salt_hex)
 PYEOF
 )
 HASH_HEX="${HASH_DATA%%:*}"
