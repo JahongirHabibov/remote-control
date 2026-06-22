@@ -1,0 +1,53 @@
+# ─────────────────────────────────────────────────────────────────────────────
+# fail2ban — jail configuration for POS Remote Control VPS
+# Copy to /etc/fail2ban/jail.local
+# ─────────────────────────────────────────────────────────────────────────────
+
+[DEFAULT]
+# Ban for 1 hour after threshold reached
+bantime  = 3600
+# Look back 10 minutes for failed attempts
+findtime = 600
+# Max attempts before ban
+maxretry = 5
+# Email notifications (optional — set your email)
+# destemail = admin@legisell.de
+# sendername = Fail2Ban POS Remote
+# action = %(action_mwl)s
+
+# ── SSH ───────────────────────────────────────────────────────────────────────
+[sshd]
+enabled  = true
+port     = ssh
+logpath  = %(sshd_log)s
+backend  = %(sshd_backend)s
+maxretry = 3
+bantime  = 7200
+
+# ── nginx — too many requests (DoS) ──────────────────────────────────────────
+[nginx-limit-req]
+enabled  = true
+port     = http,https
+logpath  = /var/log/nginx/error.log
+maxretry = 10
+findtime = 60
+bantime  = 3600
+
+# ── nginx — 4xx flood (scanning/probing) ─────────────────────────────────────
+[nginx-http-auth]
+enabled  = true
+port     = http,https
+logpath  = /var/log/nginx/access.log
+maxretry = 20
+findtime = 60
+bantime  = 3600
+
+# ── Guacamole login brute force ───────────────────────────────────────────────
+[guacamole]
+enabled  = true
+port     = http,https
+filter   = guacamole
+logpath  = /var/log/nginx/access.log
+maxretry = 5
+findtime = 300
+bantime  = 7200

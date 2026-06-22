@@ -1,0 +1,66 @@
+services:
+
+  # ── Apache Guacamole web application ────────────────────────────────────────
+  guacamole:
+    image: guacamole/guacamole:${GUACAMOLE_VERSION:-1.5.5}
+    container_name: pos-guacamole
+    restart: unless-stopped
+    depends_on:
+      postgres:
+        condition: service_healthy
+      guacd:
+        condition: service_started
+    environment:
+      GUACD_HOSTNAME: guacd
+      GUACD_PORT: 4822
+      POSTGRESQL_HOSTNAME: postgres
+      POSTGRESQL_PORT: 5432
+      POSTGRESQL_DATABASE: ${POSTGRES_DB:-guacamole_db}
+      POSTGRESQL_USERNAME: ${POSTGRES_USER:-guacamole}
+      POSTGRESQL_PASSWORD: ${POSTGRES_PASSWORD}
+    volumes:
+      # TOTP extension + any other extensions
+      - ./guacamole/extensions:/etc/guacamole/extensions:ro
+      # Custom guacamole.properties (generated from template by setup.sh)
+      - ./guacamole/guacamole.properties:/etc/guacamole/guacamole.properties:ro
+    # Only accessible from localhost — nginx acts as reverse proxy
+    ports:
+      - "127.0.0.1:8080:8080"
+    networks:
+      - guac-net
+
+  # ── Guacamole protocol daemon ────────────────────────────────────────────────
+  guacd:
+    image: guacamole/guacd:${GUACAMOLE_VERSION:-1.5.5}
+    container_name: pos-guacd
+    restart: unless-stopped
+    networks:
+      - guac-net
+
+  # ── PostgreSQL database ───────────────────────────────────────────────────────
+  postgres:
+    image: postgres:16-alpine
+    container_name: pos-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:-guacamole_db}
+      POSTGRES_USER: ${POSTGRES_USER:-guacamole}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+      # Schema init SQL is placed here by setup.sh
+      - ./guacamole/init:/docker-entrypoint-initdb.d:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-guacamole} -d ${POSTGRES_DB:-guacamole_db}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - guac-net
+
+networks:
+  guac-net:
+    driver: bridge
+
+volumes:
+  postgres-data:

@@ -1,0 +1,32 @@
+# ── Secrets & generated configs ───────────────────────────────────────────────
+.env
+*.key
+*.pem
+*.crt
+
+# ── WireGuard (actual server config with private key) ─────────────────────────
+wireguard/wg0.conf
+wireguard/server-private.key
+wireguard/server-public.key
+
+# ── Device configs (per-device secrets) ───────────────────────────────────────
+devices/*/
+!devices/.gitkeep
+
+# ── Guacamole (actual configs with passwords) ─────────────────────────────────
+guacamole/guacamole.properties
+guacamole/init/
+guacamole/extensions/*.jar
+
+# ── Backups ───────────────────────────────────────────────────────────────────
+backups/
+
+# ── Docker volumes (if mapped locally) ───────────────────────────────────────
+postgres-data/
+
+# ── OS / editor artefacts ─────────────────────────────────────────────────────
+.DS_Store
+Thumbs.db
+*.swp
+*.swo
+*~
