@@ -42,8 +42,6 @@ echo ""
 
 echo -e "  ${BOLD}Services:${NC}"
 svc_status "wg-quick@wg0"  "WireGuard (wg0)"
-svc_status "nginx"          "nginx"
-svc_status "fail2ban"       "fail2ban"
 echo ""
 
 echo -e "  ${BOLD}Docker containers:${NC}"
@@ -88,27 +86,4 @@ if ip link show wg0 &>/dev/null; then
 else
     fail "WireGuard interface wg0 not available"
 fi
-echo ""
-
-echo -e "  ${BOLD}SSL certificate:${NC}"
-DOMAIN="${DOMAIN:-}"
-if [[ -n "$DOMAIN" && -f "/etc/letsencrypt/live/${DOMAIN}/cert.pem" ]]; then
-    EXPIRY=$(openssl x509 -enddate -noout -in "/etc/letsencrypt/live/${DOMAIN}/cert.pem" | cut -d= -f2)
-    ok "${DOMAIN}  — expires: ${EXPIRY}"
-else
-    fail "No certificate found for ${DOMAIN:-<DOMAIN not set>}"
-fi
-echo ""
-
-echo -e "  ${BOLD}fail2ban bans:${NC}"
-sudo fail2ban-client status 2>/dev/null | grep "Jail list:" | sed 's/.*: //' | tr ',' '\n' | while read -r jail; do
-    jail=$(echo "$jail" | xargs)
-    [[ -z "$jail" ]] && continue
-    BANNED=$(sudo fail2ban-client status "$jail" 2>/dev/null | grep "Currently banned:" | awk '{print $NF}')
-    if [[ "$BANNED" -gt 0 ]]; then
-        warn "${jail}: ${BANNED} IP(s) currently banned"
-    else
-        ok "${jail}: no active bans"
-    fi
-done || warn "fail2ban not running"
 echo ""

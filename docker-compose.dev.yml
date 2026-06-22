@@ -1,0 +1,12 @@
+# ─────────────────────────────────────────────────────────────────────────────
+# DEV override — exposed ports for local development.
+#
+# Usage (from remote-control/ directory):
+#   docker compose -f docker-compose.yml -f docker-compose.dev.yml up -d --build
+#   → Guacamole: http://localhost:8080/guacamole/
+# ─────────────────────────────────────────────────────────────────────────────
+
+services:
+  guacamole:
+    ports:
+      - "8080:8080"

@@ -1,0 +1,48 @@
+# ─────────────────────────────────────────────────────────────────────────────
+# PROD override — Traefik routing, SSL via Let's Encrypt, no exposed ports.
+#
+# Usage (from remote-control/ directory):
+#   docker compose -f docker-compose.yml -f docker-compose.prod.yml up -d --build
+#
+# Requires proxy project running first:
+#   cd ~/proxy && make up
+# ─────────────────────────────────────────────────────────────────────────────
+
+services:
+  guacamole:
+    restart: unless-stopped
+    networks:
+      - proxy-network
+    labels:
+      - "traefik.enable=true"
+
+      # ── Main Guacamole HTTPS Route ──────────────────────────────────────────
+      - "traefik.http.routers.remote-control.rule=Host(`${DOMAIN}`)"
+      - "traefik.http.routers.remote-control.entrypoints=websecure"
+      - "traefik.http.routers.remote-control.tls.certresolver=letsencrypt"
+      - "traefik.http.routers.remote-control.service=remote-control-svc"
+      - "traefik.http.routers.remote-control.priority=10"
+      - "traefik.http.routers.remote-control.middlewares=security-headers@file,compress@file,rate-limit@file,guac-root-redirect"
+
+      # ── Strict rate limiting on Guacamole Login API ───────────────────────
+      - "traefik.http.routers.remote-control-login.rule=Host(`${DOMAIN}`) && Path(`/guacamole/api/tokens`)"
+      - "traefik.http.routers.remote-control-login.entrypoints=websecure"
+      - "traefik.http.routers.remote-control-login.tls.certresolver=letsencrypt"
+      - "traefik.http.routers.remote-control-login.service=remote-control-svc"
+      - "traefik.http.routers.remote-control-login.priority=20"
+      - "traefik.http.routers.remote-control-login.middlewares=security-headers@file,rate-limit-strict@file"
+
+      # ── Root redirect: / -> /guacamole/ ─────────────────────────────────────
+      # This handles root-level access and forwards it to the Tomcat application path
+      - "traefik.http.middlewares.guac-root-redirect.redirectregex.regex=^https?://([^/]+)/$$"
+      - "traefik.http.middlewares.guac-root-redirect.redirectregex.replacement=https://$$1/guacamole/"
+
+      # ── Tomcat Container Port ────────────────────────────────────────────────
+      - "traefik.http.services.remote-control-svc.loadbalancer.server.port=8080"
+
+# Reference the proxy network — do NOT redefine it here.
+# The proxy project creates and owns this network.
+networks:
+  proxy-network:
+    external: true
+    name: proxy-network

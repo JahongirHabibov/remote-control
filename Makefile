@@ -51,27 +51,22 @@ remove-device: ## Remove a POS device (interactive selection)
 list-devices: ## List all registered POS devices with WG + VNC status
 	@bash scripts/list-devices.sh
 
+COMPOSE_CMD := docker compose -f docker-compose.yml -f docker-compose.prod.yml
+
 restart: ## Restart all Docker services
 	@echo "Restarting Docker services..."
-	@docker compose restart
-	@echo "Done."
-
-certbot-renew: ## Force certificate renewal and reload nginx
-	@echo "Renewing Let's Encrypt certificate..."
-	@docker exec pos-certbot certbot renew --webroot -w /var/www/certbot --quiet
-	@echo "Reloading nginx..."
-	@docker exec pos-nginx nginx -s reload
+	@$(COMPOSE_CMD) restart
 	@echo "Done."
 
 logs: ## Stream recent logs from all Docker services
-	@docker compose logs --tail=100 -f
+	@$(COMPOSE_CMD) logs --tail=100 -f
 
 backup: ## Backup Guacamole DB + WireGuard configs to ./backups/
 	@bash scripts/backup.sh
 
 update: ## Pull latest Docker images and recreate containers
-	@docker compose pull
-	@docker compose up -d --remove-orphans
+	@$(COMPOSE_CMD) pull
+	@$(COMPOSE_CMD) up -d --remove-orphans
 
 open-firewall: ## Configure UFW rules (SSH + HTTP + HTTPS + WireGuard)
 	@bash scripts/open-firewall.sh

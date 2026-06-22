@@ -123,74 +123,13 @@ else
 fi
 
 # ═══════════════════════════════════════════════════════════════
-step "6/6  SSL Certificate + Docker Stack"
+step "6/6  Docker Stack (Traefik-adapted)"
 # ═══════════════════════════════════════════════════════════════
 
-# Prepare certbot directories
-mkdir -p "$SCRIPT_DIR/certbot/www/.well-known/acme-challenge"
-mkdir -p "$SCRIPT_DIR/certbot/certs"
-ok "Certbot directories ready"
-
-# Substitute domain placeholder in nginx config (idempotent)
-if grep -q "DOMAIN_PLACEHOLDER" "$SCRIPT_DIR/nginx/conf.d/guacamole.conf"; then
-    sed -i "s|DOMAIN_PLACEHOLDER|${DOMAIN}|g" "$SCRIPT_DIR/nginx/conf.d/guacamole.conf"
-    ok "nginx config: domain substituted → ${DOMAIN}"
-else
-    ok "nginx config: domain already set"
-fi
-
-# Obtain initial Let's Encrypt certificate via Docker (webroot method)
-if [[ ! -d "$SCRIPT_DIR/certbot/certs/live/${DOMAIN}" ]]; then
-    info "Obtaining Let's Encrypt certificate for ${DOMAIN}..."
-
-    # Start a minimal temporary nginx to serve the ACME HTTP-01 challenge
-    TMP_NGINX_CONF=$(mktemp /tmp/nginx-init-XXXXXX.conf)
-    cat > "$TMP_NGINX_CONF" << 'NGINX_EOF'
-server {
-    listen 80;
-    server_name _;
-    location /.well-known/acme-challenge/ {
-        root /var/www/certbot;
-    }
-    location / { return 200 'ok'; add_header Content-Type text/plain; }
-}
-NGINX_EOF
-
-    docker run -d \
-        --name pos-nginx-tmp \
-        -p 80:80 \
-        -v "$SCRIPT_DIR/certbot/www:/var/www/certbot:ro" \
-        -v "$TMP_NGINX_CONF:/etc/nginx/conf.d/default.conf:ro" \
-        nginx:1.27-alpine
-    info "Temporary nginx started for ACME challenge"
-
-    # Run certbot with webroot method (same authenticator used for renewals)
-    if docker run --rm \
-        -v "$SCRIPT_DIR/certbot/www:/var/www/certbot" \
-        -v "$SCRIPT_DIR/certbot/certs:/etc/letsencrypt" \
-        certbot/certbot certonly \
-            --webroot -w /var/www/certbot \
-            --email "${CERTBOT_EMAIL}" \
-            --agree-tos --no-eff-email \
-            -d "${DOMAIN}"; then
-        ok "SSL certificate obtained"
-    else
-        docker stop pos-nginx-tmp && docker rm pos-nginx-tmp
-        rm -f "$TMP_NGINX_CONF"
-        die "certbot failed. Check:\n  1. DNS A-record for ${DOMAIN} points to this VPS\n  2. Port 80 is reachable from the internet\n  3. Run: make check"
-    fi
-
-    docker stop pos-nginx-tmp && docker rm pos-nginx-tmp
-    rm -f "$TMP_NGINX_CONF"
-    info "Temporary nginx stopped"
-else
-    ok "SSL certificate already exists (skipped)"
-fi
-
-# Start full Docker stack
-info "Starting Docker stack..."
+# Start full Docker stack using production overlay
+info "Starting Docker stack with Traefik integration..."
 cd "$SCRIPT_DIR"
-docker compose up -d
+docker compose -f docker-compose.yml -f docker-compose.prod.yml up -d
 ok "Docker stack started"
 
 # Wait for PostgreSQL to be ready (up to 60 s)
