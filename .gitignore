@@ -21,6 +21,13 @@ guacamole/extensions/*.jar
 # ── Backups ───────────────────────────────────────────────────────────────────
 backups/
 
+# ── Certbot (generated certs + webroot) ──────────────────────────────────────
+certbot/certs/
+certbot/www/
+
+# ── Logs ──────────────────────────────────────────────────────────────────────
+logs/
+
 # ── Docker volumes (if mapped locally) ───────────────────────────────────────
 postgres-data/
 

@@ -1,6 +1,56 @@
 services:
 
-  # ── Apache Guacamole web application ────────────────────────────────────────
+  # ── nginx reverse proxy (TLS termination + security headers) ─────────────────
+  nginx:
+    image: nginx:1.27-alpine
+    container_name: pos-nginx
+    restart: unless-stopped
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./nginx/nginx.conf:/etc/nginx/nginx.conf:ro
+      - ./nginx/conf.d:/etc/nginx/conf.d:ro
+      - ./nginx/snippets:/etc/nginx/snippets:ro
+      - ./certbot/www:/var/www/certbot:ro
+      - ./certbot/certs:/etc/letsencrypt:ro
+      - nginx-logs:/var/log/nginx
+    depends_on:
+      - guacamole
+    networks:
+      - guac-net
+
+  # ── Certbot — Let's Encrypt cert renewal daemon ───────────────────────────────
+  certbot:
+    image: certbot/certbot:latest
+    container_name: pos-certbot
+    restart: unless-stopped
+    volumes:
+      - ./certbot/www:/var/www/certbot
+      - ./certbot/certs:/etc/letsencrypt
+    # Renew every 12h; nginx reload is handled by make certbot-renew cron target
+    entrypoint: /bin/sh -c "trap exit TERM; while :; do certbot renew --webroot -w /var/www/certbot --quiet; sleep 12h & wait $${!}; done"
+
+  # ── fail2ban — brute-force + DoS protection ───────────────────────────────────
+  fail2ban:
+    image: crazymax/fail2ban:latest
+    container_name: pos-fail2ban
+    restart: unless-stopped
+    network_mode: host        # must share host network stack to manipulate iptables
+    cap_add:
+      - NET_ADMIN
+      - NET_RAW
+    environment:
+      - TZ=${TZ:-UTC}
+      - F2B_LOG_LEVEL=INFO
+      - F2B_DB_PURGEAGE=7d
+    volumes:
+      - ./fail2ban/jail.d:/data/jail.d:ro
+      - ./fail2ban/filter.d:/data/filter.d:ro
+      - nginx-logs:/var/log/nginx:ro
+      - fail2ban-data:/data
+
+  # ── Apache Guacamole web application ─────────────────────────────────────────
   guacamole:
     image: guacamole/guacamole:${GUACAMOLE_VERSION:-1.5.5}
     container_name: pos-guacamole
@@ -19,17 +69,15 @@ services:
       POSTGRESQL_USERNAME: ${POSTGRES_USER:-guacamole}
       POSTGRESQL_PASSWORD: ${POSTGRES_PASSWORD}
     volumes:
-      # TOTP extension + any other extensions
       - ./guacamole/extensions:/etc/guacamole/extensions:ro
-      # Custom guacamole.properties (generated from template by setup.sh)
       - ./guacamole/guacamole.properties:/etc/guacamole/guacamole.properties:ro
-    # Only accessible from localhost — nginx acts as reverse proxy
-    ports:
-      - "127.0.0.1:8080:8080"
+    # NOT exposed to host — nginx proxies to this container only
+    expose:
+      - "8080"
     networks:
       - guac-net
 
-  # ── Guacamole protocol daemon ────────────────────────────────────────────────
+  # ── Guacamole protocol daemon ─────────────────────────────────────────────────
   guacd:
     image: guacamole/guacd:${GUACAMOLE_VERSION:-1.5.5}
     container_name: pos-guacd
@@ -37,7 +85,7 @@ services:
     networks:
       - guac-net
 
-  # ── PostgreSQL database ───────────────────────────────────────────────────────
+  # ── PostgreSQL ────────────────────────────────────────────────────────────────
   postgres:
     image: postgres:16-alpine
     container_name: pos-postgres
@@ -48,7 +96,6 @@ services:
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
     volumes:
       - postgres-data:/var/lib/postgresql/data
-      # Schema init SQL is placed here by setup.sh
       - ./guacamole/init:/docker-entrypoint-initdb.d:ro
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-guacamole} -d ${POSTGRES_DB:-guacamole_db}"]
@@ -64,3 +111,5 @@ networks:
 
 volumes:
   postgres-data:
+  nginx-logs:
+  fail2ban-data:

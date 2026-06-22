@@ -26,7 +26,6 @@ echo ""
 # ── System ────────────────────────────────────────────────────────────────────
 echo -e "  ${BOLD}System:${NC}"
 
-# Ubuntu 24.04
 OS_ID=$(. /etc/os-release && echo "$ID")
 OS_VER=$(. /etc/os-release && echo "$VERSION_ID")
 if [[ "$OS_ID" == "ubuntu" && "$OS_VER" == "24.04" ]]; then
@@ -35,7 +34,6 @@ else
     warn "Ubuntu 24.04 expected — found ${OS_ID} ${OS_VER} (may still work)"
 fi
 
-# Root / sudo
 if [[ $EUID -eq 0 ]]; then
     ok "Running as root"
 elif sudo -n true 2>/dev/null; then
@@ -58,18 +56,17 @@ check_cmd() {
     fi
 }
 
-check_cmd "docker"          "docker.io"          "or install Docker CE"
-check_cmd "wg"              "wireguard-tools"     ""
-check_cmd "nginx"           "nginx"               ""
-check_cmd "certbot"         "certbot python3-certbot-nginx" ""
-check_cmd "fail2ban-client" "fail2ban"            ""
-check_cmd "ufw"             "ufw"                 ""
-check_cmd "openssl"         "openssl"             ""
-check_cmd "jq"              "jq"                  "used by device scripts"
-check_cmd "psql"            "postgresql-client"   "used by add-device.sh"
+# wireguard-tools: only host-native dep (manages /etc/wireguard/ and wg-quick)
+check_cmd "wg"     "wireguard-tools" ""
+check_cmd "ufw"    "ufw"             ""
+check_cmd "openssl" "openssl"        "used to generate passwords"
+check_cmd "jq"     "jq"              "used by device scripts"
+
+# docker: all other services run in containers
+check_cmd "docker" "docker.io"       "or install Docker CE"
 
 echo ""
-echo -e "  ${BOLD}Docker Compose:${NC}"
+echo -e "  ${BOLD}Docker Compose plugin:${NC}"
 if docker compose version &>/dev/null 2>&1; then
     ver=$(docker compose version --short 2>/dev/null || echo "")
     ok "docker compose plugin  ${ver:+(v${ver})}"
@@ -81,7 +78,6 @@ echo ""
 echo -e "  ${BOLD}Configuration:${NC}"
 if [[ -f "$SCRIPT_DIR/.env" ]]; then
     ok ".env file found"
-    # Check critical vars
     for var in DOMAIN CERTBOT_EMAIL POSTGRES_PASSWORD GUAC_ADMIN_PASSWORD WG_PORT WG_INET_IFACE; do
         val="${!var:-}"
         if [[ -z "$val" ]]; then
@@ -124,8 +120,7 @@ echo -e "  ${BOLD}Guacamole TOTP extension:${NC}"
 if ls "$SCRIPT_DIR/guacamole/extensions"/guacamole-auth-totp-*.jar &>/dev/null 2>&1; then
     ok "TOTP extension JAR found"
 else
-    fail "TOTP extension JAR missing"
-    info "Download during setup: make setup"
+    warn "TOTP extension JAR missing — will be downloaded automatically by: make setup"
     info "Or manually: https://guacamole.apache.org/releases/"
 fi
 

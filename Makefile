@@ -12,7 +12,7 @@ SHELL         := /bin/bash
 export
 
 .PHONY: help check setup status add-device remove-device list-devices \
-        restart logs backup update open-firewall
+        restart logs backup update open-firewall certbot-renew
 
 # ── Colours ───────────────────────────────────────────────────────────────────
 BOLD  := \033[1m
@@ -51,13 +51,16 @@ remove-device: ## Remove a POS device (interactive selection)
 list-devices: ## List all registered POS devices with WG + VNC status
 	@bash scripts/list-devices.sh
 
-restart: ## Restart all services (Docker + nginx + fail2ban)
+restart: ## Restart all Docker services
 	@echo "Restarting Docker services..."
 	@docker compose restart
-	@echo "Restarting nginx..."
-	@sudo systemctl restart nginx
-	@echo "Restarting fail2ban..."
-	@sudo systemctl restart fail2ban
+	@echo "Done."
+
+certbot-renew: ## Force certificate renewal and reload nginx
+	@echo "Renewing Let's Encrypt certificate..."
+	@docker exec pos-certbot certbot renew --webroot -w /var/www/certbot --quiet
+	@echo "Reloading nginx..."
+	@docker exec pos-nginx nginx -s reload
 	@echo "Done."
 
 logs: ## Stream recent logs from all Docker services
