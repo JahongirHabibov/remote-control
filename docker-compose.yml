@@ -16,7 +16,7 @@ services:
       POSTGRESQL_HOSTNAME: postgres
       POSTGRESQL_PORT: 5432
       POSTGRESQL_DATABASE: ${POSTGRES_DB:-guacamole_db}
-      POSTGRESQL_USERNAME: ${POSTGRES_USER:-guacamole}
+      POSTGRESQL_USER: ${POSTGRES_USER:-guacamole}
       POSTGRESQL_PASSWORD: ${POSTGRES_PASSWORD}
     volumes:
       - ./guacamole/extensions:/etc/guacamole/extensions:ro
