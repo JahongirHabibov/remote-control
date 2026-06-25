@@ -14,12 +14,9 @@ Address = WG_SERVER_IP_PLACEHOLDER
 ListenPort = WG_PORT_PLACEHOLDER
 
 # NAT: route POS device traffic through VPS internet interface
-PostUp   = iptables -A FORWARD -i %i -j ACCEPT; \
-           iptables -A FORWARD -o %i -j ACCEPT; \
-           iptables -t nat -A POSTROUTING -o WG_INET_IFACE_PLACEHOLDER -j MASQUERADE
-PostDown = iptables -D FORWARD -i %i -j ACCEPT; \
-           iptables -D FORWARD -o %i -j ACCEPT; \
-           iptables -t nat -D POSTROUTING -o WG_INET_IFACE_PLACEHOLDER -j MASQUERADE
+# WICHTIG: wg-quick unterstützt KEINE Backslash-Zeilenumbrüche — PostUp/PostDown je EINE Zeile!
+PostUp = iptables -A FORWARD -i %i -j ACCEPT; iptables -A FORWARD -o %i -j ACCEPT; iptables -t nat -A POSTROUTING -o WG_INET_IFACE_PLACEHOLDER -j MASQUERADE
+PostDown = iptables -D FORWARD -i %i -j ACCEPT; iptables -D FORWARD -o %i -j ACCEPT; iptables -t nat -D POSTROUTING -o WG_INET_IFACE_PLACEHOLDER -j MASQUERADE
 
 # ─────────────────────────────────────────────────────────────────────────────
 # POS Device Peers — managed by add-device.sh / remove-device.sh
