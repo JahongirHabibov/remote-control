@@ -50,11 +50,34 @@ if [[ -d "$DEVICE_DIR" ]]; then
 fi
 
 read -rp "  Location / description (optional): " DEVICE_LOCATION
-read -rsp "  VNC password for this device:      " VNC_PASSWORD
-echo ""
-read -rp "  SSH username on POS device:        " SSH_USERNAME
-read -rsp "  SSH password on POS device:        " SSH_PASSWORD
-echo ""
+
+# VNC password — required, min 6 chars (TigerVNC rejects shorter)
+while true; do
+    read -rsp "  VNC password (min 6 chars):        " VNC_PASSWORD
+    echo ""
+    if [[ ${#VNC_PASSWORD} -lt 6 ]]; then
+        echo -e "  ${YELLOW}VNC password must be at least 6 characters.${NC}"
+        continue
+    fi
+    read -rsp "  Repeat VNC password:               " VNC_PASSWORD_CONFIRM
+    echo ""
+    if [[ "$VNC_PASSWORD" != "$VNC_PASSWORD_CONFIRM" ]]; then
+        echo -e "  ${YELLOW}Passwords do not match — try again.${NC}"
+        continue
+    fi
+    break
+done
+
+# SSH — optional. Leave username empty to skip SSH entirely (VNC-only device).
+ENABLE_SSH=false
+SSH_USERNAME=""
+SSH_PASSWORD=""
+read -rp "  SSH username (empty = skip SSH):   " SSH_USERNAME
+if [[ -n "$SSH_USERNAME" ]]; then
+    ENABLE_SSH=true
+    read -rsp "  SSH password on POS device:        " SSH_PASSWORD
+    echo ""
+fi
 
 # ── Assign IP ─────────────────────────────────────────────────────────────────
 WG_CLIENT_IP_ADDR=$(next_available_ip)
@@ -121,29 +144,40 @@ INSERT INTO guacamole_connection_parameter (connection_id, parameter_name, param
 "
 ok "Guacamole VNC connection created"
 
-# SSH connection
-SSH_CONN_ID=$(pg_exec "
+# SSH connection — only if requested
+SSH_CONN_ID=""
+if [[ "$ENABLE_SSH" == true ]]; then
+    SSH_CONN_ID=$(pg_exec "
 INSERT INTO guacamole_connection (connection_name, protocol, parent_id)
 VALUES ('${DEVICE_NAME} — SSH', 'ssh', ${GROUP_ID})
 RETURNING connection_id;
 ")
-pg_exec "
+    pg_exec "
 INSERT INTO guacamole_connection_parameter (connection_id, parameter_name, parameter_value) VALUES
   (${SSH_CONN_ID}, 'hostname', '${WG_CLIENT_IP_ADDR}'),
   (${SSH_CONN_ID}, 'port',     '22'),
   (${SSH_CONN_ID}, 'username', '${SSH_USERNAME}'),
   (${SSH_CONN_ID}, 'password', '${SSH_PASSWORD}');
 "
-ok "Guacamole SSH connection created"
+    ok "Guacamole SSH connection created"
+else
+    info "SSH skipped (VNC-only device)"
+fi
 
-# Grant admin user READ permission on both connections
+# Grant admin user READ permission on created connections
 ADMIN_ENTITY_ID=$(pg_exec "SELECT e.entity_id FROM guacamole_entity e WHERE e.name = '${GUAC_ADMIN_USER}' AND e.type = 'USER' LIMIT 1;")
 pg_exec "
 INSERT INTO guacamole_connection_permission (entity_id, connection_id, permission) VALUES
-  (${ADMIN_ENTITY_ID}, ${VNC_CONN_ID}, 'READ'),
+  (${ADMIN_ENTITY_ID}, ${VNC_CONN_ID}, 'READ')
+ON CONFLICT DO NOTHING;
+"
+if [[ "$ENABLE_SSH" == true ]]; then
+    pg_exec "
+INSERT INTO guacamole_connection_permission (entity_id, connection_id, permission) VALUES
   (${ADMIN_ENTITY_ID}, ${SSH_CONN_ID}, 'READ')
 ON CONFLICT DO NOTHING;
 "
+fi
 ok "Permissions granted to admin"
 
 # ── Generate remote-access.conf for POS device ───────────────────────────────
@@ -173,7 +207,11 @@ echo -e "${BOLD}${GREEN}  ✓ Device '${DEVICE_NAME}' registered successfully${N
 echo ""
 echo -e "  ${BOLD}WireGuard IP:${NC}      ${WG_CLIENT_IP}"
 echo -e "  ${BOLD}VNC in Guacamole:${NC}  ${DEVICE_NAME} — VNC"
-echo -e "  ${BOLD}SSH in Guacamole:${NC}  ${DEVICE_NAME} — SSH"
+if [[ "$ENABLE_SSH" == true ]]; then
+    echo -e "  ${BOLD}SSH in Guacamole:${NC}  ${DEVICE_NAME} — SSH"
+else
+    echo -e "  ${BOLD}SSH in Guacamole:${NC}  ${YELLOW}skipped (VNC-only)${NC}"
+fi
 echo -e "  ${BOLD}Config file:${NC}       devices/${DEVICE_NAME}/remote-access.conf"
 echo ""
 echo -e "  ${CYAN}Copy to POS device and run:${NC}"
